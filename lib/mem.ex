@@ -6,6 +6,7 @@ defmodule Mem do
     maxmemory_size     = opts |> Keyword.get(:maxmemory_size)      || config[:maxmemory_size]     || nil
     maxmemory_strategy = opts |> Keyword.get(:maxmemory_strategy)  || config[:maxmemory_strategy] || :lru
     persistence        = opts |> Keyword.get(:persistence)         || config[:persistence]        || false
+    nodes              = opts |> Keyword.get(:nodes)               || config[:nodes]              || [node()]
     maxmemory_strategy in [:lru, :ttl, :fifo] || raise "unknown maxmemory strategy"
 
     quote do
@@ -16,6 +17,7 @@ defmodule Mem do
         mem_size:      unquote(Mem.Utils.format_space_size(maxmemory_size)),
         mem_strategy:  unquote(maxmemory_strategy),
         persistence:   unquote(persistence),
+        nodes:         unquote(nodes),
         name:          name,
         env:           __ENV__,
       ]
@@ -32,10 +34,19 @@ defmodule Mem do
       Code.compiler_options(ignore_module_conflict: false)
 
       def child_spec do
+        require Logger
         if unquote(persistence) do
-          Application.start(:mnesia)
-          :mnesia.create_schema([node()])
-          :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
+          Application.stop(:mnesia)
+          Distribution.connect_to_nodes(unquote(nodes))
+          if (Distribution.first_node?(unquote(nodes), node())) do
+            Distribution.stop_mnesia(unquote(nodes))
+            Logger.debug ">>> Creating mnesia schema for: #{inspect unquote(nodes)} ..."
+            ret = :mnesia.create_schema(unquote(nodes))
+            Logger.debug ">>> Creating mnesia schema: #{inspect ret} !!!"
+            Distribution.start_mnesia(unquote(nodes))
+          else
+            Distribution.wait_for_start()
+          end
         end
         Supervisor.Spec.supervisor(@sup, [], id: __MODULE__)
       end

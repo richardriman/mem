@@ -5,9 +5,12 @@ defmodule Mem.Storages.Mnesia.Out do
       @data  :"#{__MODULE__}.Mnesia.Data"
       @index :"#{__MODULE__}.Mnesia.Index"
 
-      def create do
-        :mnesia.create_table(@data,  [type: :set, disc_copies: [node()]])
-        :mnesia.create_table(@index, [type: :ordered_set, disc_copies: [node()]])
+      def create(nodes) do
+        require Logger
+        ret = :mnesia.create_table(@data,  [type: :set, disc_copies: nodes])
+        Logger.debug ">>> OUT Create table for: #{inspect nodes} - ret: #{inspect ret}"
+        ret = :mnesia.create_table(@index, [type: :ordered_set, disc_copies: nodes])
+        Logger.debug ">>> OUT Create table for: #{inspect nodes} - ret: #{inspect ret}"
       end
 
       def memory_used do

@@ -4,7 +4,7 @@ defmodule Mem.Storages.ETS.TTL do
     quote do
       @name :"#{__MODULE__}.ETS"
 
-      def create do
+      def create(_) do
         :ets.new(@name, [:set, :public, :named_table, :compressed, write_concurrency: true])
       end
 
