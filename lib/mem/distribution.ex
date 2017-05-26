@@ -23,12 +23,17 @@ defmodule Distribution do
     Logger.debug ">>> Stopping mnesia remotely #{inspect ret} DONE!"
   end
 
-  def wait_for_start() do
+  def wait_mnesia_starting(times\\10) do
     app = Application.started_applications() |> Enum.filter(fn {a, _, _} -> a == :mnesia end)
-    unless length(app) > 0 do
-      Logger.debug ">>> Wait mnesia to start ..."
-      :timer.sleep(1000)
-      wait_for_start()
+    if (length(app) > 0) do
+      :ok
+    else
+      if times > 0 do
+        :timer.sleep(1000)
+        wait_mnesia_starting(times - 1)
+      else
+        :timeout
+      end
     end
   end
 

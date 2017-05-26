@@ -3,17 +3,15 @@ defmodule Mem.Supervisor do
   defmacro __using__(opts) do
     storages  = opts |> Keyword.fetch!(:storages)
     processes = opts |> Keyword.fetch!(:processes)
-    nodes = opts |> Keyword.fetch!(:nodes)
     quote do
       @storages  unquote(storages)
       @processes unquote(processes)
-      @nodes     unquote(nodes)
 
       use Supervisor
 
-      def start_link do
+      def start_link(nodes) do
         for {_, module} <- @storages do
-          module.create(@nodes)
+          module.create(nodes)
         end
         Supervisor.start_link(__MODULE__, [], name: __MODULE__)
       end

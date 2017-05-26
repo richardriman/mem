@@ -6,7 +6,6 @@ defmodule Mem do
     maxmemory_size     = opts |> Keyword.get(:maxmemory_size)      || config[:maxmemory_size]     || nil
     maxmemory_strategy = opts |> Keyword.get(:maxmemory_strategy)  || config[:maxmemory_strategy] || :lru
     persistence        = opts |> Keyword.get(:persistence)         || config[:persistence]        || false
-    nodes              = opts |> Keyword.get(:nodes)               || config[:nodes]              || [node()]
     maxmemory_strategy in [:lru, :ttl, :fifo] || raise "unknown maxmemory strategy"
 
     quote do
@@ -17,7 +16,6 @@ defmodule Mem do
         mem_size:      unquote(Mem.Utils.format_space_size(maxmemory_size)),
         mem_strategy:  unquote(maxmemory_strategy),
         persistence:   unquote(persistence),
-        nodes:         unquote(nodes),
         name:          name,
         env:           __ENV__,
       ]
@@ -33,32 +31,40 @@ defmodule Mem do
       @sup Mem.Builder.create_supervisor(@opts)
       Code.compiler_options(ignore_module_conflict: false)
 
-      def child_spec(my_nodes \\ nil) do
+      @doc """
+      Accept options like:
+        - nodes: list of nodes to use for mnesia, will be ignore id persistence is false (default: [node()])
+        - init_mnesia: flag to skip the init of mnesia because it's managed outside. (default: true)
+      """
+      def child_spec(opts \\ []) do
         require Logger
+        mnesia_nodes = Keyword.get(opts, :nodes, [node()])
+        init_mnesia = Keyword.get(opts, :init_mnesia, true)
         if unquote(persistence) do
-
-          mnesia_nodes = my_nodes || unquote(nodes) || [node()]
-          Logger.debug "#{inspect mnesia_nodes} == #{inspect node()} #{inspect(mnesia_nodes == node())}"
-
           if (mnesia_nodes == [node()]) do
-            Application.start(:mnesia)
-            :mnesia.create_schema([node()])
-            :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
+            if (init_mnesia) do
+              Application.start(:mnesia)
+              :mnesia.create_schema([node()])
+              :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
+            end
           else
-            Application.stop(:mnesia)
-            Distribution.connect_to_nodes(mnesia_nodes)
-            if (Distribution.first_node?(mnesia_nodes, node())) do
-              Distribution.stop_mnesia(mnesia_nodes)
-              Logger.debug ">>> Creating mnesia schema for: #{inspect mnesia_nodes} ..."
-              ret = :mnesia.create_schema(mnesia_nodes)
-              Logger.debug ">>> Creating mnesia schema: #{inspect ret} !!!"
-              Distribution.start_mnesia(mnesia_nodes)
-            else
-              Distribution.wait_for_start()
+            if init_mnesia do
+              Distribution.connect_to_nodes(mnesia_nodes)
+              if (Distribution.first_node?(mnesia_nodes, node())) do
+                Distribution.stop_mnesia(mnesia_nodes)
+                Logger.debug ">>> Creating mnesia schema for: #{inspect mnesia_nodes} ..."
+                ret = :mnesia.create_schema(mnesia_nodes)
+                Logger.debug ">>> Creating mnesia schema: #{inspect ret} !!!"
+                Distribution.start_mnesia(mnesia_nodes)
+              else
+                if Distribution.wait_mnesia_starting() == :timeout do
+                  :mnesia.start
+                end
+              end
             end
           end
         end
-        Supervisor.Spec.supervisor(@sup, [], id: __MODULE__)
+        Supervisor.Spec.supervisor(@sup, [mnesia_nodes], id: __MODULE__)
       end
 
       def memory_used do
