@@ -33,19 +33,29 @@ defmodule Mem do
       @sup Mem.Builder.create_supervisor(@opts)
       Code.compiler_options(ignore_module_conflict: false)
 
-      def child_spec do
+      def child_spec(my_nodes \\ nil) do
         require Logger
         if unquote(persistence) do
-          Application.stop(:mnesia)
-          Distribution.connect_to_nodes(unquote(nodes))
-          if (Distribution.first_node?(unquote(nodes), node())) do
-            Distribution.stop_mnesia(unquote(nodes))
-            Logger.debug ">>> Creating mnesia schema for: #{inspect unquote(nodes)} ..."
-            ret = :mnesia.create_schema(unquote(nodes))
-            Logger.debug ">>> Creating mnesia schema: #{inspect ret} !!!"
-            Distribution.start_mnesia(unquote(nodes))
+
+          mnesia_nodes = my_nodes || unquote(nodes) || [node()]
+          Logger.debug "#{inspect mnesia_nodes} == #{inspect node()} #{inspect(mnesia_nodes == node())}"
+
+          if (mnesia_nodes == [node()]) do
+            Application.start(:mnesia)
+            :mnesia.create_schema([node()])
+            :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
           else
-            Distribution.wait_for_start()
+            Application.stop(:mnesia)
+            Distribution.connect_to_nodes(mnesia_nodes)
+            if (Distribution.first_node?(mnesia_nodes, node())) do
+              Distribution.stop_mnesia(mnesia_nodes)
+              Logger.debug ">>> Creating mnesia schema for: #{inspect mnesia_nodes} ..."
+              ret = :mnesia.create_schema(mnesia_nodes)
+              Logger.debug ">>> Creating mnesia schema: #{inspect ret} !!!"
+              Distribution.start_mnesia(mnesia_nodes)
+            else
+              Distribution.wait_for_start()
+            end
           end
         end
         Supervisor.Spec.supervisor(@sup, [], id: __MODULE__)
