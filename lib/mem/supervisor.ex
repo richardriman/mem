@@ -9,9 +9,9 @@ defmodule Mem.Supervisor do
 
       use Supervisor
 
-      def start_link do
+      def start_link(nodes) do
         for {_, module} <- @storages do
-          module.create
+          module.create(nodes)
         end
         Supervisor.start_link(__MODULE__, [], name: __MODULE__)
       end

@@ -4,12 +4,14 @@ defmodule Mem.Storages.Mnesia.TTL do
     quote do
       @name :"#{__MODULE__}.Mnesia"
 
-      def create do
+      def create(nodes) do
+        require Logger
         # Application.load :mnesia
         # Application.put_env :mnesia, :dir, '/tmp/mn'
         # :mnesia.start
         # :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
-        :mnesia.create_table(@name, [type: :set, disc_copies: [node()]])
+        ret = :mnesia.create_table(@name, [type: :set, disc_copies: nodes])
+        Logger.debug ">>> TTL Create table for: #{inspect nodes} - ret: #{inspect ret}"
       end
 
       def memory_used do

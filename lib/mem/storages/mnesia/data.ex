@@ -4,8 +4,10 @@ defmodule Mem.Storages.Mnesia.Data do
     quote do
       @name :"#{__MODULE__}.Mnesia"
 
-      def create do
-        :mnesia.create_table(@name, [type: :set, disc_copies: [node()]])
+      def create(nodes) do
+        require Logger
+        ret = :mnesia.create_table(@name, [type: :set, disc_copies: nodes])
+        Logger.debug ">>> DATA Create table for: #{inspect nodes} - ret: #{inspect ret}"
       end
 
       def memory_used do

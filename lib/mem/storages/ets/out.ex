@@ -22,7 +22,7 @@ defmodule Mem.Storages.ETS.Out do
       @data  :"#{__MODULE__}.ETS.Data"
       @index :"#{__MODULE__}.ETS.Index"
 
-      def create do
+      def create(_) do
         :ets.new(@data,  [:set,         :public, :named_table, :compressed])
         :ets.new(@index, [:ordered_set, :public, :named_table, :compressed])
       end

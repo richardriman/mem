@@ -31,13 +31,40 @@ defmodule Mem do
       @sup Mem.Builder.create_supervisor(@opts)
       Code.compiler_options(ignore_module_conflict: false)
 
-      def child_spec do
+      @doc """
+      Accept options like:
+        - nodes: list of nodes to use for mnesia, will be ignore id persistence is false (default: [node()])
+        - init_mnesia: flag to skip the init of mnesia because it's managed outside. (default: true)
+      """
+      def child_spec(opts \\ []) do
+        require Logger
+        mnesia_nodes = Keyword.get(opts, :nodes, [node()])
+        init_mnesia = Keyword.get(opts, :init_mnesia, true)
         if unquote(persistence) do
-          Application.start(:mnesia)
-          :mnesia.create_schema([node()])
-          :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
+          if (mnesia_nodes == [node()]) do
+            if (init_mnesia) do
+              Application.start(:mnesia)
+              :mnesia.create_schema([node()])
+              :mnesia.change_table_copy_type(:schema, node(), :disc_copies)
+            end
+          else
+            if init_mnesia do
+              Distribution.connect_to_nodes(mnesia_nodes)
+              if (Distribution.first_node?(mnesia_nodes, node())) do
+                Distribution.stop_mnesia(mnesia_nodes)
+                Logger.debug ">>> Creating mnesia schema for: #{inspect mnesia_nodes} ..."
+                ret = :mnesia.create_schema(mnesia_nodes)
+                Logger.debug ">>> Creating mnesia schema: #{inspect ret} !!!"
+                Distribution.start_mnesia(mnesia_nodes)
+              else
+                if Distribution.wait_mnesia_starting() == :timeout do
+                  :mnesia.start
+                end
+              end
+            end
+          end
         end
-        Supervisor.Spec.supervisor(@sup, [], id: __MODULE__)
+        Supervisor.Spec.supervisor(@sup, [mnesia_nodes], id: __MODULE__)
       end
 
       def memory_used do

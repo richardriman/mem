@@ -7,7 +7,7 @@ defmodule Mem.Storages.Proxy do
       @storage __MODULE__
       @process Mem.Utils.process_name(:proxy, unquote(name))
 
-      def create do
+      def create(_) do
         :ets.new(@storage, [:set, :public, :named_table, :compressed, read_concurrency: true])
       end
 
